@@ -8,6 +8,7 @@ wheels/
 *.mp4
 assets/
 output/
+cache/
 
 # Virtual environments
 .venv

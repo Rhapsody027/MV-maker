@@ -1,6 +1,6 @@
-import hashlib
 import json
 import os
+import re
 
 import librosa
 
@@ -9,12 +9,15 @@ def find_file(folder, extensions):
     for file in os.listdir(folder):
         if file.lower().endswith(extensions):
             return os.path.join(folder, file)
+
     raise Exception(f"File not found: {folder}")
 
 
 def get_media_files():
     audio = find_file("assets/music", (".wav", ".mp3", ".flac"))
+
     image = find_file("assets/images", (".jpg", ".jpeg", ".png"))
+
     return audio, image
 
 
@@ -23,9 +26,14 @@ def get_audio_duration(path):
 
 
 def get_cache_name(path):
-    name = hashlib.md5(path.encode()).hexdigest()
 
-    return f"output/{name}_beats.json"
+    os.makedirs("cache", exist_ok=True)
+
+    name = os.path.splitext(os.path.basename(path))[0]
+
+    name = re.sub(r"[^a-zA-Z0-9_-]", "_", name)
+
+    return f"cache/{name}_beats.json"
 
 
 def get_beats(path):
@@ -33,7 +41,7 @@ def get_beats(path):
     cache = get_cache_name(path)
 
     if os.path.exists(cache):
-        with open(cache, "r") as f:
+        with open(cache, "r", encoding="utf-8") as f:
             return json.load(f)
 
     print("Analyzing beats...")
@@ -46,9 +54,7 @@ def get_beats(path):
 
     beats = times.tolist()
 
-    os.makedirs("output", exist_ok=True)
-
-    with open(cache, "w") as f:
+    with open(cache, "w", encoding="utf-8") as f:
         json.dump(beats, f)
 
     return beats

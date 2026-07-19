@@ -8,12 +8,9 @@ from src.visual import render_frame
 
 
 def open_file(path):
-    path = os.path.abspath(path)
 
     if os.path.exists(path):
-        os.startfile(path)
-    else:
-        print("File not found:", path)
+        os.startfile(os.path.abspath(path))
 
 
 def generate_video(config):
@@ -22,16 +19,17 @@ def generate_video(config):
 
     if preview:
         width, height = 540, 960
-        bitrate = "800k"
+        bitrate = "1000k"
+        preset = "veryfast"
     else:
         width, height = 1080, 1920
-        bitrate = "5000k"
+        bitrate = "6000k"
+        preset = "slow"
 
     os.makedirs("output", exist_ok=True)
 
-    silent = os.path.abspath("output/silent.mp4")
-
-    output = os.path.abspath("output/reel.mp4")
+    silent = "output/.silent.mp4"
+    output = "output/reel.mp4"
 
     img = cv2.imread(config["image"])
 
@@ -63,7 +61,7 @@ def generate_video(config):
             "-c:v",
             "libx264",
             "-preset",
-            "medium",
+            preset,
             "-b:v",
             bitrate,
             "-c:a",
@@ -73,7 +71,6 @@ def generate_video(config):
             "-shortest",
             output,
         ],
-        capture_output=True,
         text=True,
     )
 
@@ -81,12 +78,10 @@ def generate_video(config):
         os.remove(silent)
 
     if result.returncode != 0:
-        print(result.stderr)
-
         raise Exception("FFmpeg failed")
 
     if not os.path.exists(output):
-        raise Exception("Video was not created: " + output)
+        raise Exception("Output missing")
 
     print("DONE:", output)
 
