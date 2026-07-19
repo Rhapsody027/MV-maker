@@ -1,9 +1,21 @@
 import os
+import platform
 import subprocess
 
 import cv2
+from tqdm import tqdm
 
 from src.visual import render_frame
+
+
+def open_video(path):
+    system = platform.system()
+
+    if system == "Windows":
+        os.startfile(path)
+
+    elif system == "Linux":
+        subprocess.run(["xdg-open", path])
 
 
 def generate_video(config):
@@ -25,7 +37,7 @@ def generate_video(config):
 
     total_frames = int(config["duration"] * fps)
 
-    for i in range(total_frames):
+    for i in tqdm(range(total_frames), desc="Rendering"):
         t = i / fps
 
         frame = render_frame(img, t, config)
@@ -52,5 +64,5 @@ def generate_video(config):
     ])
 
     os.remove(silent)
-
+    open_video(output)
     print("DONE:", output)
