@@ -1,13 +1,9 @@
-import random
-
 import cv2
 import numpy as np
 
 
 def resize_cover(img, w, h):
-
     ih, iw, _ = img.shape
-
     scale = max(w / iw, h / ih)
 
     nw = int(iw * scale)
@@ -21,147 +17,108 @@ def resize_cover(img, w, h):
     return img[y : y + h, x : x + w]
 
 
-def apply_color_grade(frame, mode):
-
-    img = frame.astype(np.float32) / 255
+def apply_color(frame, mode):
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV).astype(np.float32)
 
     if mode == "vocal":
-        # 暗、冷、低飽和
-
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-
-        hsv[:, :, 1] = hsv[:, :, 1] * 0.65
-        hsv[:, :, 2] = hsv[:, :, 2] * 0.75
-
-        frame = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
-
+        hsv[:, :, 1] *= 0.65
+        hsv[:, :, 2] *= 0.75
     else:
-        # drop 高對比、高飽和
-
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-
         hsv[:, :, 1] = np.clip(hsv[:, :, 1] * 1.35, 0, 255)
 
         hsv[:, :, 2] = np.clip(hsv[:, :, 2] * 1.15, 0, 255)
 
-        frame = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+    hsv = np.clip(hsv, 0, 255).astype(np.uint8)
 
-        frame = cv2.convertScaleAbs(frame, alpha=1.15, beta=5)
-
-    return frame
+    return cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
 
 
-def apply_bloom(frame, strength=0.25):
-
+def bloom(frame):
     blur = cv2.GaussianBlur(frame, (0, 0), 25)
 
-    result = cv2.addWeighted(frame, 1, blur, strength, 0)
-
-    return result
+    return cv2.addWeighted(frame, 1, blur, 0.3, 0)
 
 
-def apply_grain(frame):
+def beat_punch(frame, t, config):
+    hit = False
 
-    noise = np.random.normal(0, 8, frame.shape)
+    for beat in config.get("beats", []):
+        if abs(t - beat) < 0.04:
+            hit = True
+            break
 
-    noisy = frame.astype(np.float32) + noise
-
-    return np.clip(noisy, 0, 255).astype(np.uint8)
-
-
-def camera_transform(frame, t, config):
-
-    drop = config["drop_time"]
-
-    if t < drop:
-        # Vocal 慢慢推近
-
-        progress = t / drop
-
-        zoom = 1 + progress * 0.08
-
-        offset_x = int(np.sin(t * 0.5) * 10)
-
-    else:
-        # Drop 更有侵略性
-
-        progress = min((t - drop) / 2, 1)
-
-        zoom = 1.1 + progress * 0.05
-
-        offset_x = int(np.sin(t * 5) * 8)
+    if not hit:
+        return frame
 
     h, w, _ = frame.shape
 
-    nw = int(w / zoom)
-    nh = int(h / zoom)
+    scale = 1.03
 
-    x = (w - nw) // 2 + offset_x
+    nw = int(w / scale)
+    nh = int(h / scale)
+
+    x = (w - nw) // 2
     y = (h - nh) // 2
 
-    cropped = frame[y : y + nh, x : x + nw]
+    crop = frame[y : y + nh, x : x + nw]
 
-    return cv2.resize(cropped, (w, h))
+    return cv2.resize(crop, (w, h))
 
 
-def render_frame(img, t, config):
-
-    w = 1080
-    h = 1920
+def render_frame(img, t, config, w, h, preview=False):
 
     frame = resize_cover(img, w, h)
 
     drop = config["drop_time"]
 
+    mode = "vocal" if t < drop else "drop"
+
     if t < drop:
-        mode = "vocal"
-
+        zoom = 1 + (t / max(drop, 0.01)) * 0.08
     else:
-        mode = "drop"
+        zoom = 1.12
 
-    # camera
+    frame = cv2.resize(frame, None, fx=zoom, fy=zoom)
 
-    frame = camera_transform(frame, t, config)
+    fh, fw, _ = frame.shape
 
-    # color
+    x = (fw - w) // 2
+    y = (fh - h) // 2
 
-    frame = apply_color_grade(frame, mode)
+    frame = frame[y : y + h, x : x + w]
 
-    # bloom
+    frame = apply_color(frame, mode)
 
-    if mode == "drop":
-        frame = apply_bloom(frame, 0.35)
-
-    # flash transition
+    if mode == "drop" and not preview:
+        frame = bloom(frame)
 
     if drop <= t <= drop + 0.15:
         frame = np.clip(frame.astype(float) * 1.8, 0, 255).astype(np.uint8)
 
-    # grain
+    frame = beat_punch(frame, t, config)
 
-    frame = apply_grain(frame)
+    if not preview:
+        noise = np.random.normal(0, 8, frame.shape)
 
-    # Hook
+        frame = np.clip(frame.astype(float) + noise, 0, 255).astype(np.uint8)
 
     if t < drop:
         cv2.putText(
             frame,
             config["hook"],
-            (80, 300),
+            (50, 200),
             cv2.FONT_HERSHEY_SIMPLEX,
-            2,
+            1.5,
             (255, 255, 255),
-            3,
+            2,
         )
-
-    # Title
 
     cv2.putText(
         frame,
         config["title"],
-        (80, 1700),
+        (50, h - 100),
         cv2.FONT_HERSHEY_SIMPLEX,
-        1.5,
+        1.2,
         (255, 255, 255),
         2,
     )
